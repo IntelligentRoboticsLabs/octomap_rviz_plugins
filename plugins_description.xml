@@ -1,44 +1,49 @@
 
-<library path="octomap_rviz_plugins">
+<library path="octomap_rviz_plugin">
 
   <class name="octomap_rviz_plugin/OccupancyGrid"
          type="octomap_rviz_plugin::OcTreeGridDisplay"
-         base_class_type="rviz::Display">
+         base_class_type="rviz_common::Display">
     <description>
       Displays 3D occupancy grids generated from compressed octomap messages.
     </description>
+    <message_type>octomap_msgs/msg/Octomap</message_type>
   </class>
 
   <class name="octomap_rviz_plugin/ColorOccupancyGrid"
          type="octomap_rviz_plugin::ColorOcTreeGridDisplay"
-         base_class_type="rviz::Display">
+         base_class_type="rviz_common::Display">
     <description>
       Displays 3D occupancy grids generated from compressed color octomap messages.
     </description>
+    <message_type>octomap_msgs/msg/Octomap</message_type>
   </class>
 
   <class name="octomap_rviz_plugin/OccupancyGridStamped"
          type="octomap_rviz_plugin::OcTreeStampedGridDisplay"
-         base_class_type="rviz::Display">
+         base_class_type="rviz_common::Display">
     <description>
       Displays 3D occupancy grids generated from compressed octomap messages.
     </description>
+    <message_type>octomap_msgs/msg/Octomap</message_type>
   </class>
   
   <class name="octomap_rviz_plugin/OccupancyMap"
 	     type="octomap_rviz_plugin::OcTreeMapDisplay"
-	     base_class_type="rviz::Display">
+	     base_class_type="rviz_common::Display">
     <description>
       Displays projected 2D occupancy maps generated from compressed octomap messages.
     </description>
+    <message_type>octomap_msgs/msg/Octomap</message_type>
   </class>
 
   <class name="octomap_rviz_plugin/OccupancyMapStamped"
 	     type="octomap_rviz_plugin::OcTreeStampedMapDisplay"
-	     base_class_type="rviz::Display">
+	     base_class_type="rviz_common::Display">
     <description>
       Displays projected 2D occupancy maps generated from compressed octomap messages.
     </description>
+    <message_type>octomap_msgs/msg/Octomap</message_type>
   </class>
   
 </library>

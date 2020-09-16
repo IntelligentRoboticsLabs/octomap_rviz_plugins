@@ -1,11 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(octomap_rviz_plugins)
+project(octomap_rviz_plugin)
 
-# Default to C++14
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
-endif()
+set(CMAKE_CXX_STANDARD 17)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic -Wnon-virtual-dtor -Woverloaded-virtual)
@@ -51,16 +48,16 @@ find_package(ament_cmake REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(rviz_rendering REQUIRED)
 find_package(rviz_default_plugins REQUIRED)
-find_package(pluginlib REQUIRED)
 find_package(rviz_ogre_vendor REQUIRED)
+find_package(pluginlib REQUIRED)
 find_package(octomap REQUIRED)
 find_package(octomap_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(Qt5 REQUIRED COMPONENTS Core Widgets)
 
 qt5_wrap_cpp(MOC_FILES
-  include/octomap_rviz_plugins/occupancy_grid_display.hpp
-  include/octomap_rviz_plugins/occupancy_map_display.hpp
+  include/octomap_rviz_plugin/occupancy_grid_display.hpp
+  include/octomap_rviz_plugin/occupancy_map_display.hpp
   #OPTIONS -DBOOST_TT_HAS_OPERATOR_HPP_INCLUDED -DBOOST_LEXICAL_CAST_INCLUDED 
 )
 
@@ -76,6 +73,7 @@ add_library(${PROJECT_NAME} SHARED
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
+  ${OGRE_INCLUDE_DIRS}
   ${Qt5Widgets_INCLUDE_DIRS}
 )
 
@@ -87,7 +85,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 
 # Causes the visibility macros to use dllexport rather than dllimport,
 # which is appropriate when building the dll but not consuming it.
-target_compile_definitions(${PROJECT_NAME} PRIVATE "OCTOMAP_RVIZ_PLUGINS_BUILDING_LIBRARY")
+target_compile_definitions(${PROJECT_NAME} PRIVATE "OCTOMAP_RVIZ_PLUGIN_BUILDING_LIBRARY")
 
 # prevent pluginlib from using boost
 target_compile_definitions(${PROJECT_NAME} PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")

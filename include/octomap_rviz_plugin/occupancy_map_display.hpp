@@ -85,6 +85,9 @@ protected:
     void handleOctomapBinaryMessage(const octomap_msgs::msg::Octomap::SharedPtr msg);
 };
 
+typedef octomap_rviz_plugin::TemplatedOccupancyMapDisplay<octomap::OcTree> OcTreeMapDisplay;
+typedef octomap_rviz_plugin::TemplatedOccupancyMapDisplay<octomap::OcTreeStamped> OcTreeStampedMapDisplay;
+
 } // namespace rviz
 
  #endif

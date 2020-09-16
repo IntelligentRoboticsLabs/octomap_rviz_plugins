@@ -31,7 +31,7 @@
  */
 
 
-#include "octomap_rviz_plugins/occupancy_map_display.hpp"
+#include "octomap_rviz_plugin/occupancy_map_display.hpp"
 
 using namespace rviz_common;
 
@@ -115,7 +115,7 @@ void OccupancyMapDisplay::unsubscribe()
   try
   {
     // reset filters
-    //sub_.reset();
+    sub_.reset();
   }
   catch (std::exception & e)
   {
@@ -210,8 +210,6 @@ void TemplatedOccupancyMapDisplay<OcTreeType>::handleOctomapBinaryMessage(const 
 } // namespace rviz
 
 #include <pluginlib/class_list_macros.hpp>
-typedef octomap_rviz_plugin::TemplatedOccupancyMapDisplay<octomap::OcTree> OcTreeMapDisplay;
-typedef octomap_rviz_plugin::TemplatedOccupancyMapDisplay<octomap::OcTreeStamped> OcTreeStampedMapDisplay;
 
-PLUGINLIB_EXPORT_CLASS(OcTreeMapDisplay, rviz_common::Display)
-PLUGINLIB_EXPORT_CLASS(OcTreeStampedMapDisplay, rviz_common::Display)
+PLUGINLIB_EXPORT_CLASS(octomap_rviz_plugin::OcTreeMapDisplay, rviz_common::Display)
+PLUGINLIB_EXPORT_CLASS(octomap_rviz_plugin::OcTreeStampedMapDisplay, rviz_common::Display)

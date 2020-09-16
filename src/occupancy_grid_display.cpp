@@ -31,31 +31,11 @@
  */
 #include <QObject>
 
-#include "octomap_rviz_plugins/occupancy_grid_display.h"
-
-#include <boost/bind.hpp>
-#include <boost/shared_ptr.hpp>
-
-#include <OGRE/OgreSceneNode.h>
-#include <OGRE/OgreSceneManager.h>
-
-#include "rviz/visualization_manager.h"
-#include "rviz/frame_manager.h"
-#include "rviz/properties/int_property.h"
-#include "rviz/properties/ros_topic_property.h"
-#include "rviz/properties/enum_property.h"
-#include "rviz/properties/float_property.h"
-
-#include <octomap/octomap.h>
-#include <octomap/ColorOcTree.h>
-#include <octomap_msgs/Octomap.h>
-#include <octomap_msgs/conversions.h>
-
-
+#include "octomap_rviz_plugin/occupancy_grid_display.hpp"
 #include <sstream>
 
 
-using namespace rviz;
+using namespace rviz_common;
 
 namespace octomap_rviz_plugin
 {
@@ -76,21 +56,21 @@ enum OctreeVoxelColorMode
 };
 
 OccupancyGridDisplay::OccupancyGridDisplay() :
-    rviz::Display(),
+    rviz_common::Display(),
     new_points_received_(false),
-    messages_received_(0),
-    queue_size_(5),
     color_factor_(0.8)
 {
-
-  octomap_topic_property_ = new RosTopicProperty( "Octomap Topic",
+  messages_received_ = 0;
+  queue_size_ = 5;
+  
+  octomap_topic_property_ = std::make_shared<properties::RosTopicProperty>( "Octomap Topic",
+                                                  "/dummy_octomap", // Temporal patch because RVIz closes when you click in the Topic Box =(
                                                   "",
-                                                  QString::fromStdString(ros::message_traits::datatype<octomap_msgs::Octomap>()),
-                                                  "octomap_msgs::Octomap topic to subscribe to (binary or full probability map)",
+                                                  "octomap_msgs::msg::Octomap topic to subscribe to (binary or full probability map)",
                                                   this,
                                                   SLOT( updateTopic() ));
 
-  queue_size_property_ = new IntProperty( "Queue Size",
+  queue_size_property_ = std::make_shared<properties::IntProperty>( "Queue Size",
                                           queue_size_,
                                           "Advanced: set the size of the incoming message queue.  Increasing this "
                                           "is useful if your incoming TF data is delayed significantly from your"
@@ -99,7 +79,7 @@ OccupancyGridDisplay::OccupancyGridDisplay() :
                                           SLOT( updateQueueSize() ));
   queue_size_property_->setMin(1);
 
-  octree_render_property_ = new rviz::EnumProperty( "Voxel Rendering", "Occupied Voxels",
+  octree_render_property_ = std::make_shared<properties::EnumProperty>( "Voxel Rendering", "Occupied Voxels",
                                                     "Select voxel type.",
                                                      this,
                                                      SLOT( updateOctreeRenderMode() ) );
@@ -108,7 +88,7 @@ OccupancyGridDisplay::OccupancyGridDisplay() :
   octree_render_property_->addOption( "Free Voxels",  OCTOMAP_FREE_VOXELS );
   octree_render_property_->addOption( "All Voxels",  OCTOMAP_FREE_VOXELS | OCTOMAP_OCCUPIED_VOXELS);
 
-  octree_coloring_property_ = new rviz::EnumProperty( "Voxel Coloring", "Z-Axis",
+  octree_coloring_property_ = std::make_shared<properties::EnumProperty>( "Voxel Coloring", "Z-Axis",
                                                 "Select voxel coloring mode",
                                                 this,
                                                 SLOT( updateOctreeColorMode() ) );
@@ -116,35 +96,36 @@ OccupancyGridDisplay::OccupancyGridDisplay() :
   octree_coloring_property_->addOption( "Cell Color",  OCTOMAP_CELL_COLOR );
   octree_coloring_property_->addOption( "Z-Axis",  OCTOMAP_Z_AXIS_COLOR );
   octree_coloring_property_->addOption( "Cell Probability",  OCTOMAP_PROBABLILTY_COLOR );
-  alpha_property_ = new rviz::FloatProperty( "Voxel Alpha", 1.0, "Set voxel transparency alpha",
+  alpha_property_ = std::make_shared<properties::FloatProperty>( "Voxel Alpha", 1.0, "Set voxel transparency alpha",
                                              this, 
                                              SLOT( updateAlpha() ) );
   alpha_property_->setMin(0.0);
   alpha_property_->setMax(1.0);
 
-  tree_depth_property_ = new IntProperty("Max. Octree Depth",
+  tree_depth_property_ = std::make_shared<properties::IntProperty>("Max. Octree Depth",
                                          max_octree_depth_,
                                          "Defines the maximum tree depth",
                                          this,
                                          SLOT (updateTreeDepth() ));
   tree_depth_property_->setMin(0);
 
-  max_height_property_ = new FloatProperty("Max. Height Display",
+  max_height_property_ = std::make_shared<properties::FloatProperty>("Max. Height Display",
                                            std::numeric_limits<double>::infinity(),
                                            "Defines the maximum height to display",
                                            this,
                                            SLOT (updateMaxHeight() ));
 
-  min_height_property_ = new FloatProperty("Min. Height Display",
+  min_height_property_ = std::make_shared<properties::FloatProperty>("Min. Height Display",
                                            -std::numeric_limits<double>::infinity(),
                                            "Defines the minimum height to display",
                                            this,
                                            SLOT (updateMinHeight() ));
+  node_ = rclcpp::Node::make_shared("occupancy_grid_display_node");
 }
 
 void OccupancyGridDisplay::onInitialize()
 {
-  boost::mutex::scoped_lock lock(mutex_);
+  std::scoped_lock lock(mutex_);
 
   box_size_.resize(max_octree_depth_);
   cloud_.resize(max_octree_depth_);
@@ -155,20 +136,18 @@ void OccupancyGridDisplay::onInitialize()
   {
     std::stringstream sname;
     sname << "PointCloud Nr." << i;
-    cloud_[i] = new rviz::PointCloud();
+    cloud_[i] = new rviz_rendering::PointCloud();
     cloud_[i]->setName(sname.str());
-    cloud_[i]->setRenderMode(rviz::PointCloud::RM_BOXES);
+    cloud_[i]->setRenderMode(rviz_rendering::PointCloud::RM_BOXES);
     scene_node_->attachObject(cloud_[i]);
   }
 }
 
 OccupancyGridDisplay::~OccupancyGridDisplay()
 {
-  std::size_t i;
-
   unsubscribe();
 
-  for (std::vector<rviz::PointCloud*>::iterator it = cloud_.begin(); it != cloud_.end(); ++it) {
+  for (std::vector<rviz_rendering::PointCloud*>::iterator it = cloud_.begin(); it != cloud_.end(); ++it) {
     delete *(it);
   }
 
@@ -208,21 +187,17 @@ void OccupancyGridDisplay::subscribe()
   {
     unsubscribe();
 
-    const std::string& topicStr = octomap_topic_property_->getStdString();
-
+    std::string topicStr = octomap_topic_property_->getStdString();
     if (!topicStr.empty())
     {
-
-      sub_.reset(new message_filters::Subscriber<octomap_msgs::Octomap>());
-
-      sub_->subscribe(threaded_nh_, topicStr, queue_size_);
-      sub_->registerCallback(boost::bind(&OccupancyGridDisplay::incomingMessageCallback, this, _1));
-
+      sub_ = node_->create_subscription<octomap_msgs::msg::Octomap>(
+        topicStr, rclcpp::SystemDefaultsQoS(),
+        std::bind(&OccupancyGridDisplay::incomingMessageCallback, this, std::placeholders::_1));
     }
   }
-  catch (ros::Exception& e)
+  catch (std::exception & e)
   {
-    setStatus(StatusProperty::Error, "Topic", (std::string("Error subscribing: ") + e.what()).c_str());
+    setStatus(properties::StatusProperty::Error, "Topic", (std::string("Error subscribing: ") + e.what()).c_str());
   }
 
 }
@@ -236,16 +211,16 @@ void OccupancyGridDisplay::unsubscribe()
     // reset filters
     sub_.reset();
   }
-  catch (ros::Exception& e)
+  catch (std::exception & e)
   {
-    setStatus(StatusProperty::Error, "Topic", (std::string("Error unsubscribing: ") + e.what()).c_str());
+    setStatus(properties::StatusProperty::Error, "Topic", (std::string("Error unsubscribing: ") + e.what()).c_str());
   }
 
 }
 
 // method taken from octomap_server package
 void OccupancyGridDisplay::setColor(double z_pos, double min_z, double max_z, double color_factor,
-                                    rviz::PointCloud::Point& point)
+                                    rviz_rendering::PointCloud::Point& point)
 {
   int i;
   double m, n, f;
@@ -324,7 +299,7 @@ void OccupancyGridDisplay::updateMinHeight()
 void OccupancyGridDisplay::clear()
 {
 
-  boost::mutex::scoped_lock lock(mutex_);
+  std::scoped_lock lock(mutex_);
 
   // reset rviz pointcloud boxes
   for (size_t i = 0; i < cloud_.size(); ++i)
@@ -335,9 +310,10 @@ void OccupancyGridDisplay::clear()
 
 void OccupancyGridDisplay::update(float wall_dt, float ros_dt)
 {
+  rclcpp::spin_some(node_);
   if (new_points_received_)
   {
-    boost::mutex::scoped_lock lock(mutex_);
+    std::scoped_lock lock(mutex_);
 
     for (size_t i = 0; i < max_octree_depth_; ++i)
     {
@@ -345,8 +321,7 @@ void OccupancyGridDisplay::update(float wall_dt, float ros_dt)
 
       cloud_[i]->clear();
       cloud_[i]->setDimensions(size, size, size);
-
-      cloud_[i]->addPoints(&new_points_[i].front(), new_points_[i].size());
+      cloud_[i]->addPoints(new_points_[i].begin(), new_points_[i].end());
       new_points_[i].clear();
       cloud_[i]->setAlpha(alpha_property_->getFloat());
     }
@@ -359,7 +334,7 @@ void OccupancyGridDisplay::reset()
 {
   clear();
   messages_received_ = 0;
-  setStatus(StatusProperty::Ok, "Messages", QString("0 binary octomap messages received"));
+  setStatus(properties::StatusProperty::Ok, "Messages", QString("0 binary octomap messages received"));
 }
 
 void OccupancyGridDisplay::updateTopic()
@@ -374,7 +349,7 @@ template <typename OcTreeType>
 bool TemplatedOccupancyGridDisplay<OcTreeType>::checkType(std::string type_id)
 {
   //General case: Need to be specialized for every used case
-  setStatus(StatusProperty::Warn, "Messages", QString("Cannot verify octomap type"));
+  setStatus(properties::StatusProperty::Warn, "Messages", QString("Cannot verify octomap type"));
   return true; //Try deserialization, might crash though
 }
   
@@ -399,7 +374,7 @@ bool TemplatedOccupancyGridDisplay<octomap::ColorOcTree>::checkType(std::string 
 }
 
 template <typename OcTreeType>
-void TemplatedOccupancyGridDisplay<OcTreeType>::setVoxelColor(PointCloud::Point& newPoint, 
+void TemplatedOccupancyGridDisplay<OcTreeType>::setVoxelColor(rviz_rendering::PointCloud::Point& newPoint, 
                                                               typename OcTreeType::NodeType& node,
                                                               double minZ, double maxZ)
 {
@@ -408,7 +383,7 @@ void TemplatedOccupancyGridDisplay<OcTreeType>::setVoxelColor(PointCloud::Point&
   switch (octree_color_mode)
   {
     case OCTOMAP_CELL_COLOR:
-      setStatus(StatusProperty::Error, "Messages", QString("Cannot extract color"));
+      setStatus(properties::StatusProperty::Error, "Messages", QString("Cannot extract color"));
       //Intentional fall-through for else-case
     case OCTOMAP_Z_AXIS_COLOR:
       setColor(newPoint.position.z, minZ, maxZ, color_factor_, newPoint);
@@ -424,7 +399,7 @@ void TemplatedOccupancyGridDisplay<OcTreeType>::setVoxelColor(PointCloud::Point&
 
 //Specialization for ColorOcTreeNode, which can set the voxel color from the node itself
 template <>
-void TemplatedOccupancyGridDisplay<octomap::ColorOcTree>::setVoxelColor(PointCloud::Point& newPoint, 
+void TemplatedOccupancyGridDisplay<octomap::ColorOcTree>::setVoxelColor(rviz_rendering::PointCloud::Point& newPoint, 
                                                                       octomap::ColorOcTree::NodeType& node,
                                                                       double minZ, double maxZ)
 {
@@ -468,24 +443,24 @@ bool OccupancyGridDisplay::updateFromTF()
 
 
 template <typename OcTreeType>
-void TemplatedOccupancyGridDisplay<OcTreeType>::incomingMessageCallback(const octomap_msgs::OctomapConstPtr& msg)
+void TemplatedOccupancyGridDisplay<OcTreeType>::incomingMessageCallback(const octomap_msgs::msg::Octomap::SharedPtr msg)
 {
   ++messages_received_;
-  setStatus(StatusProperty::Ok, "Messages", QString::number(messages_received_) + " octomap messages received");
-  setStatusStd(StatusProperty::Ok, "Type", msg->id.c_str());
+  setStatus(properties::StatusProperty::Ok, "Messages", QString::number(messages_received_) + " octomap messages received");
+  setStatusStd(properties::StatusProperty::Ok, "Type", msg->id.c_str());
   if(!checkType(msg->id)){
-    setStatusStd(StatusProperty::Error, "Message", "Wrong octomap type. Use a different display type.");
+    setStatusStd(properties::StatusProperty::Error, "Message", "Wrong octomap type. Use a different display type.");
     return;
   }
 
-  ROS_DEBUG("Received OctomapBinary message (size: %d bytes)", (int)msg->data.size());
-
+  RCLCPP_DEBUG(node_->get_logger(),
+   "Received OctomapBinary message (size: %d bytes)", (int)msg->data.size());
   header_ = msg->header;
   if (!updateFromTF()) {
       std::stringstream ss;
       ss << "Failed to transform from frame [" << header_.frame_id << "] to frame ["
           << context_->getFrameManager()->getFixedFrame() << "]";
-      setStatusStd(StatusProperty::Error, "Message", ss.str());
+      setStatusStd(properties::StatusProperty::Error, "Message", ss.str());
       return;
   }
 
@@ -495,12 +470,12 @@ void TemplatedOccupancyGridDisplay<OcTreeType>::incomingMessageCallback(const oc
   if (tree){
     octomap = dynamic_cast<OcTreeType*>(tree);
     if(!octomap){
-      setStatusStd(StatusProperty::Error, "Message", "Wrong octomap type. Use a different display type.");
+      setStatusStd(properties::StatusProperty::Error, "Message", "Wrong octomap type. Use a different display type.");
     }
   }
   else
   {
-    setStatusStd(StatusProperty::Error, "Message", "Failed to deserialize octree message.");
+    setStatusStd(properties::StatusProperty::Error, "Message", "Failed to deserialize octree message.");
     return;
   }
 
@@ -582,7 +557,7 @@ void TemplatedOccupancyGridDisplay<OcTreeType>::incomingMessageCallback(const oc
 
           if (display_voxel)
           {
-            PointCloud::Point newPoint;
+            rviz_rendering::PointCloud::Point newPoint;
 
             newPoint.position.x = it.getX();
             newPoint.position.y = it.getY();
@@ -603,7 +578,7 @@ void TemplatedOccupancyGridDisplay<OcTreeType>::incomingMessageCallback(const oc
 
   if (pointCount)
   {
-    boost::mutex::scoped_lock lock(mutex_);
+    std::scoped_lock lock(mutex_);
 
     new_points_received_ = true;
 
@@ -616,13 +591,10 @@ void TemplatedOccupancyGridDisplay<OcTreeType>::incomingMessageCallback(const oc
 
 } // namespace octomap_rviz_plugin
 
-#include <pluginlib/class_list_macros.h>
+#include <pluginlib/class_list_macros.hpp>
 
-typedef octomap_rviz_plugin::TemplatedOccupancyGridDisplay<octomap::OcTree> OcTreeGridDisplay;
-typedef octomap_rviz_plugin::TemplatedOccupancyGridDisplay<octomap::ColorOcTree> ColorOcTreeGridDisplay;
-typedef octomap_rviz_plugin::TemplatedOccupancyGridDisplay<octomap::OcTreeStamped> OcTreeStampedGridDisplay;
 
-PLUGINLIB_EXPORT_CLASS( OcTreeGridDisplay, rviz::Display)
-PLUGINLIB_EXPORT_CLASS( ColorOcTreeGridDisplay, rviz::Display)
-PLUGINLIB_EXPORT_CLASS( OcTreeStampedGridDisplay, rviz::Display)
+PLUGINLIB_EXPORT_CLASS(octomap_rviz_plugin::OcTreeGridDisplay, rviz_common::Display)
+PLUGINLIB_EXPORT_CLASS(octomap_rviz_plugin::ColorOcTreeGridDisplay, rviz_common::Display)
+PLUGINLIB_EXPORT_CLASS(octomap_rviz_plugin::OcTreeStampedGridDisplay, rviz_common::Display)
 

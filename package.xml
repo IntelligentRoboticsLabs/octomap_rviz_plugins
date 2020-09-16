@@ -1,5 +1,5 @@
 <package format="2">
-  <name>octomap_rviz_plugins</name>
+  <name>octomap_rviz_plugin</name>
   <version>0.2.2</version>
   <description>
      A set of plugins for displaying occupancy information decoded from binary octomap messages. 
