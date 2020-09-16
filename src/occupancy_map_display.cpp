@@ -31,37 +31,32 @@
  */
 
 
-#include "octomap_rviz_plugins/occupancy_map_display.h"
+#include "octomap_rviz_plugins/occupancy_map_display.hpp"
 
-#include "rviz/visualization_manager.h"
-#include "rviz/properties/int_property.h"
-#include "rviz/properties/ros_topic_property.h"
-
-#include <octomap/octomap.h>
-#include <octomap_msgs/Octomap.h>
-#include <octomap_msgs/conversions.h>
-
-using namespace rviz;
+using namespace rviz_common;
 
 namespace octomap_rviz_plugin
 {
 
 static const std::size_t max_octree_depth_ = sizeof(unsigned short) * 8;
 
-OccupancyMapDisplay::OccupancyMapDisplay()
-  : rviz::MapDisplay()
-  , octree_depth_ (max_octree_depth_)
+OccupancyMapDisplay::OccupancyMapDisplay(): 
+  rviz_default_plugins::displays::MapDisplay(),
+  octree_depth_ (max_octree_depth_)
 {
 
   topic_property_->setName("Octomap Binary Topic");
-  topic_property_->setMessageType(QString::fromStdString(ros::message_traits::datatype<octomap_msgs::Octomap>()));
+  QString message_type = QString::fromStdString("");
+  //topic_property_->setMessageType(QString::fromStdString(ros::message_traits::datatype<octomap_msgs::msg::Octomap>()));
+  topic_property_->setMessageType(message_type);
   topic_property_->setDescription("octomap_msgs::OctomapBinary topic to subscribe to.");
 
-  tree_depth_property_ = new IntProperty("Max. Octree Depth",
+  tree_depth_property_ = new rviz_common::properties::IntProperty("Max. Octree Depth",
                                          octree_depth_,
                                          "Defines the maximum tree depth",
                                          this,
                                          SLOT (updateTreeDepth() ));
+  node_ = rclcpp::Node::make_shared("occupancy_map_display_node");
 }
 
 OccupancyMapDisplay::~OccupancyMapDisplay()
@@ -71,7 +66,7 @@ OccupancyMapDisplay::~OccupancyMapDisplay()
 
 void OccupancyMapDisplay::onInitialize()
 {
-  rviz::MapDisplay::onInitialize();
+  rviz_default_plugins::displays::MapDisplay::onInitialize();
 }
 
 void OccupancyMapDisplay::updateTreeDepth()
@@ -102,17 +97,14 @@ void OccupancyMapDisplay::subscribe()
 
     if (!topicStr.empty())
     {
-
-      sub_.reset(new message_filters::Subscriber<octomap_msgs::Octomap>());
-
-      sub_->subscribe(threaded_nh_, topicStr, 5);
-      sub_->registerCallback(boost::bind(&OccupancyMapDisplay::handleOctomapBinaryMessage, this, _1));
-
+      sub_ = node_->create_subscription<octomap_msgs::msg::Octomap>(
+        topicStr, rclcpp::SystemDefaultsQoS(),
+        std::bind(&OccupancyMapDisplay::handleOctomapBinaryMessage, this, std::placeholders::_1));
     }
   }
-  catch (ros::Exception& e)
+  catch (std::exception & e)
   {
-    setStatus(StatusProperty::Error, "Topic", (std::string("Error subscribing: ") + e.what()).c_str());
+    setStatus(properties::StatusProperty::Error, "Topic", (std::string("Error subscribing: ") + e.what()).c_str());
   }
 }
 
@@ -123,20 +115,21 @@ void OccupancyMapDisplay::unsubscribe()
   try
   {
     // reset filters
-    sub_.reset();
+    //sub_.reset();
   }
-  catch (ros::Exception& e)
+  catch (std::exception & e)
   {
-    setStatus(StatusProperty::Error, "Topic", (std::string("Error unsubscribing: ") + e.what()).c_str());
+    setStatus(properties::StatusProperty::Error, "Topic", (std::string("Error unsubscribing: ") + e.what()).c_str());
   }
 }
 
 
 template <typename OcTreeType>
-void TemplatedOccupancyMapDisplay<OcTreeType>::handleOctomapBinaryMessage(const octomap_msgs::OctomapConstPtr& msg)
+void TemplatedOccupancyMapDisplay<OcTreeType>::handleOctomapBinaryMessage(const octomap_msgs::msg::Octomap::SharedPtr msg)
 {
 
-  ROS_DEBUG("Received OctomapBinary message (size: %d bytes)", (int)msg->data.size());
+  RCLCPP_DEBUG(node_->get_logger(),
+   "Received OctomapBinary message (size: %d bytes)", (int)msg->data.size());
 
   // creating octree
   OcTreeType* octomap = NULL;
@@ -147,7 +140,7 @@ void TemplatedOccupancyMapDisplay<OcTreeType>::handleOctomapBinaryMessage(const 
 
   if (!octomap)
   {
-    this->setStatusStd(StatusProperty::Error, "Message", "Failed to create octree structure");
+    this->setStatusStd(properties::StatusProperty::Error, "Message", "Failed to create octree structure");
     return;
   }
 
@@ -159,21 +152,19 @@ void TemplatedOccupancyMapDisplay<OcTreeType>::handleOctomapBinaryMessage(const 
 
   unsigned int tree_depth = octomap->getTreeDepth();
 
-  octomap::OcTreeKey paddedMinKey = octomap->coordToKey(minPt);
-
-  nav_msgs::OccupancyGrid::Ptr occupancy_map (new nav_msgs::OccupancyGrid());
+  octomap::OcTreeKey paddedMinKey = octomap->coordToKey(minPt);  
+  auto occupancy_map = std::make_shared<map_msgs::msg::OccupancyGridUpdate>();
 
   unsigned int width, height;
-  double res;
+  double res = octomap->getNodeSize(octree_depth_);
 
   unsigned int ds_shift = tree_depth-octree_depth_;
 
   occupancy_map->header = msg->header;
-  occupancy_map->info.resolution = res = octomap->getNodeSize(octree_depth_);
-  occupancy_map->info.width = width = (maxX-minX) / res + 1;
-  occupancy_map->info.height = height = (maxY-minY) / res + 1;
-  occupancy_map->info.origin.position.x = minX  - (res / (float)(1<<ds_shift) ) + res;
-  occupancy_map->info.origin.position.y = minY  - (res / (float)(1<<ds_shift) );
+  occupancy_map->width = width = (maxX-minX) / res + 1;
+  occupancy_map->height = height = (maxY-minY) / res + 1;
+  occupancy_map->x = minX  - (res / (float)(1<<ds_shift) ) + res;
+  occupancy_map->y = minY  - (res / (float)(1<<ds_shift) );
 
   occupancy_map->data.clear();
   occupancy_map->data.resize(width*height, -1);
@@ -213,14 +204,14 @@ void TemplatedOccupancyMapDisplay<OcTreeType>::handleOctomapBinaryMessage(const 
 
   delete octomap;
 
-  this->incomingMap(occupancy_map);
+  this->incomingUpdate(occupancy_map);
 }
 
 } // namespace rviz
 
-#include <pluginlib/class_list_macros.h>
+#include <pluginlib/class_list_macros.hpp>
 typedef octomap_rviz_plugin::TemplatedOccupancyMapDisplay<octomap::OcTree> OcTreeMapDisplay;
 typedef octomap_rviz_plugin::TemplatedOccupancyMapDisplay<octomap::OcTreeStamped> OcTreeStampedMapDisplay;
 
-PLUGINLIB_EXPORT_CLASS( OcTreeMapDisplay, rviz::Display)
-PLUGINLIB_EXPORT_CLASS( OcTreeStampedMapDisplay, rviz::Display)
+PLUGINLIB_EXPORT_CLASS(OcTreeMapDisplay, rviz_common::Display)
+PLUGINLIB_EXPORT_CLASS(OcTreeStampedMapDisplay, rviz_common::Display)

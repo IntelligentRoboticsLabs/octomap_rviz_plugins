@@ -35,24 +35,27 @@
 
 #ifndef Q_MOC_RUN 
 
-#include <qobject.h>
+//#include <qobject.h>
+#include "rclcpp/rclcpp.hpp"
+#include "rviz_default_plugins/displays/map/map_display.hpp"
+#include "rviz_common/properties/int_property.hpp"
+#include "rviz_common/properties/ros_topic_property.hpp"
 
-#include <ros/ros.h>
-
-#include "rviz/default_plugin/map_display.h"
-
-#include <octomap_msgs/Octomap.h>
-
+#include <octomap/octomap.h>
 #include <octomap/OcTreeStamped.h>
+#include <octomap_msgs/conversions.h>
+#include <octomap_msgs/msg/octomap.hpp>
+#include "map_msgs/msg/occupancy_grid_update.hpp"
 
 #include <message_filters/subscriber.h>
+//#include "rviz/visualization_manager.h"
 
 #endif
 
 namespace octomap_rviz_plugin
 {
 
-class OccupancyMapDisplay: public rviz::MapDisplay
+class OccupancyMapDisplay: public rviz_default_plugins::displays::MapDisplay
 {
 Q_OBJECT
 public:
@@ -68,18 +71,18 @@ protected:
   virtual void subscribe();
   virtual void unsubscribe();
 
-  virtual void handleOctomapBinaryMessage(const octomap_msgs::OctomapConstPtr& msg) = 0;
-
-  boost::shared_ptr<message_filters::Subscriber<octomap_msgs::Octomap> > sub_;
-
+  virtual void handleOctomapBinaryMessage(const octomap_msgs::msg::Octomap::SharedPtr msg) = 0;
+  //void handleOctomapBinaryMessage(const octomap_msgs::msg::Octomap::SharedPtr msg);
+  rclcpp::Subscription<octomap_msgs::msg::Octomap>::SharedPtr sub_;
+  std::shared_ptr<rclcpp::Node> node_;
   unsigned int octree_depth_;
-  rviz::IntProperty* tree_depth_property_;
+  rviz_common::properties::IntProperty* tree_depth_property_;
 };
 
 template <typename OcTreeType>
 class TemplatedOccupancyMapDisplay: public OccupancyMapDisplay {
 protected:
-    void handleOctomapBinaryMessage(const octomap_msgs::OctomapConstPtr& msg);
+    void handleOctomapBinaryMessage(const octomap_msgs::msg::Octomap::SharedPtr msg);
 };
 
 } // namespace rviz
