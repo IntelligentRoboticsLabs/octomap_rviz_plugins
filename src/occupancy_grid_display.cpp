@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2008, Willow Garage, Inc.
- * Copyright (c) 2018, Bosch Software Innovations GmbH.
+ * Copyright (c) 2013, Willow Garage, Inc.
+ * Copyright (c) 2020, Intelligent Robotics Lab URJC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,9 +26,10 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Author: Julius Kammerl (jkammerl@willowgarage.com)
+ *
  */
-
-#include "octomap_rviz_plugin/occupancy_grid_display.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -57,6 +58,8 @@
 #include "rviz_common/validate_floats.hpp"
 #include "rviz_common/display_context.hpp"
 #include "rviz_default_plugins/displays/map/palette_builder.hpp"
+
+#include "octomap_rviz_plugin/occupancy_grid_display.hpp"
 
 
 namespace octomap_rviz_plugin
