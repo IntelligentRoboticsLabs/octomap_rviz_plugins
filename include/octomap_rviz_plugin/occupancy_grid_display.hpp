@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013, Willow Garage, Inc.
+ * Copyright (c) 2020, Intelligent Robotics Lab URJC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,61 +34,95 @@
 #ifndef RVIZ_OCCUPANCY_GRID_DISPLAY_H
 #define RVIZ_OCCUPANCY_GRID_DISPLAY_H
 
-#include "rclcpp/rclcpp.hpp"
-#include <mutex>
-#include <message_filters/subscriber.h>
-#include <octomap_msgs/msg/octomap.hpp>
-#include <std_msgs/msg/header.hpp>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include <octomap/OcTreeStamped.h>
 #include <octomap/ColorOcTree.h>
 #include <OgreSceneNode.h>
 #include <OgreSceneManager.h>
 
-#ifndef Q_MOC_RUN 
+#ifndef Q_MOC_RUN
 
 #include <OgreTexture.h>
 #include <OgreMaterial.h>
 #include <OgreVector3.h>
 #include <OgreSharedPtr.h>
 
-#endif
+#endif  // Q_MOC_RUN
 
-//#include "rviz_common/frame_manager_iface.hpp"
-#include "rviz_common/properties/int_property.hpp"
-#include "rviz_common/properties/ros_topic_property.hpp"
-#include "rviz_common/properties/enum_property.hpp"
-#include "rviz_common/properties/float_property.hpp"
+#include "octomap_msgs/msg/octomap.hpp"
+#include "rclcpp/time.hpp"
+#include "rclcpp/qos.hpp"
+
+#include "rviz_common/message_filter_display.hpp"
+
+#include "rviz_default_plugins/visibility_control.hpp"
+#include "rviz_rendering/objects/point_cloud.hpp"
 
 #include <octomap/octomap.h>
 #include <octomap/ColorOcTree.h>
 #include <octomap_msgs/conversions.h>
 
-#include <rviz_common/display.hpp>
-#include "rviz_common/display_context.hpp"
-//#include "rviz/ogre_helpers/point_cloud.h"
-#include "rviz_rendering/objects/point_cloud.hpp"
+namespace Ogre
+{
+class ManualObject;
+}
 
+namespace rviz_common
+{
+namespace properties
+{
 
+class EnumProperty;
+class FloatProperty;
+class IntProperty;
+class Property;
+class QuaternionProperty;
+class VectorProperty;
+
+}  // namespace properties
+}  // namespace rviz_common
 
 namespace octomap_rviz_plugin
 {
 
-class OccupancyGridDisplay : public rviz_common::Display
+class AlphaSetter;
+
+
+/**
+ * \class OccupancyGridDisplay
+ * \brief Displays a map along the XY plane.
+ */
+class OccupancyGridDisplay : public
+  rviz_common::MessageFilterDisplay<octomap_msgs::msg::Octomap>
 {
-Q_OBJECT
+  Q_OBJECT
+
 public:
+  // TODO(botteroa-si): Constructor for testing, remove once ros_nodes can be mocked and call
+  // initialize() instead
+  explicit OccupancyGridDisplay(rviz_common::DisplayContext * context);
   OccupancyGridDisplay();
-  virtual ~OccupancyGridDisplay();
+  ~OccupancyGridDisplay() override;
 
-  // Overrides from Display
-  virtual void onInitialize();
-  virtual void update(float wall_dt, float ros_dt);
-  virtual void reset();
+  void onInitialize() override;
+  void fixedFrameChanged() override;
+  void reset() override;
 
-private Q_SLOTS:
+public Q_SLOTS:
+  void showMap();
+
+Q_SIGNALS:
+  /** @brief Emitted when a new map is received*/
+  void mapUpdated();
+
+protected Q_SLOTS:
+  /** @brief Show current_map_ in the scene. */
+  void transformMap();
+  void updateMapUpdateTopic();
   void updateQueueSize();
-  void updateTopic();
   void updateTreeDepth();
   void updateOctreeRenderMode();
   void updateOctreeColorMode();
@@ -96,14 +131,28 @@ private Q_SLOTS:
   void updateMinHeight();
 
 protected:
-  // overrides from Display
-  virtual void onEnable();
-  virtual void onDisable();
+  void updateTopic() override;
+  void update(float wall_dt, float ros_dt) override;
 
-  void subscribe();
-  void unsubscribe();
+  void subscribe() override;
+  void unsubscribe() override;
 
-  virtual void incomingMessageCallback(const octomap_msgs::msg::Octomap::SharedPtr msg) = 0;
+  void onEnable() override;
+
+  /** @brief Copy update's data into current_map_ and call showMap(). */
+  void incomingUpdate(octomap_msgs::msg::Octomap::ConstSharedPtr update);
+
+  bool updateDataOutOfBounds(octomap_msgs::msg::Octomap::ConstSharedPtr update) const;
+  void updateMapDataInMemory(octomap_msgs::msg::Octomap::ConstSharedPtr update);
+
+  void clear();
+
+  void subscribeToUpdateTopic();
+  void unsubscribeToUpdateTopic();
+
+  void showValidMap();
+
+  bool updateFromTF();
 
   void setColor(
     double z_pos,
@@ -112,18 +161,8 @@ protected:
     double color_factor,
     rviz_rendering::PointCloud::Point& point);
 
-  void clear();
-
-  virtual bool updateFromTF();
-
   typedef std::vector<rviz_rendering::PointCloud::Point> VPoint;
   typedef std::vector<VPoint> VVPoint;
-  std::shared_ptr<rclcpp::Node> node_;
-
-  rclcpp::Subscription<octomap_msgs::msg::Octomap>::SharedPtr sub_;
-
-  std::mutex mutex_;
-
   // point buffer
   VVPoint new_points_;
   VVPoint point_buf_;
@@ -133,26 +172,37 @@ protected:
   std::vector<rviz_rendering::PointCloud*> cloud_;
   std::vector<double> box_size_;
   std_msgs::msg::Header header_;
-
-  // Plugin properties
-  std::shared_ptr<rviz_common::properties::IntProperty> queue_size_property_;
-  std::shared_ptr<rviz_common::properties::RosTopicProperty> octomap_topic_property_;
-  std::shared_ptr<rviz_common::properties::EnumProperty> octree_render_property_;
-  std::shared_ptr<rviz_common::properties::EnumProperty> octree_coloring_property_;
-  std::shared_ptr<rviz_common::properties::IntProperty> tree_depth_property_;
-  std::shared_ptr<rviz_common::properties::FloatProperty> alpha_property_;
-  std::shared_ptr<rviz_common::properties::FloatProperty> max_height_property_;
-  std::shared_ptr<rviz_common::properties::FloatProperty> min_height_property_;
-
-  u_int32_t queue_size_;
-  uint32_t messages_received_;
   double color_factor_;
+
+  bool loaded_;
+
+  float resolution_;
+  size_t width_;
+  size_t height_;
+  std::string frame_;
+  octomap_msgs::msg::Octomap current_map_;
+
+  rclcpp::Subscription<octomap_msgs::msg::Octomap>::SharedPtr update_subscription_;
+  rclcpp::QoS update_profile_;
+
+  rviz_common::properties::RosTopicProperty * update_topic_property_;
+  rviz_common::properties::QosProfileProperty * update_profile_property_;
+  rviz_common::properties::EnumProperty * octree_render_property_;
+  rviz_common::properties::EnumProperty * octree_coloring_property_;
+  rviz_common::properties::IntProperty * tree_depth_property_;
+  rviz_common::properties::FloatProperty * alpha_property_;
+  rviz_common::properties::FloatProperty * max_height_property_;
+  rviz_common::properties::FloatProperty * min_height_property_;
+
+  uint32_t update_messages_received_;
 };
 
 template <typename OcTreeType>
-class TemplatedOccupancyGridDisplay: public OccupancyGridDisplay {
+class RVIZ_DEFAULT_PLUGINS_PUBLIC TemplatedOccupancyGridDisplay : public OccupancyGridDisplay {
 protected:
-  void incomingMessageCallback(const octomap_msgs::msg::Octomap::SharedPtr msg);
+  /** @brief Copy msg into current_map_ and call showMap(). */
+  void processMessage(octomap_msgs::msg::Octomap::ConstSharedPtr msg) override;
+  
   void setVoxelColor(rviz_rendering::PointCloud::Point& newPoint, typename OcTreeType::NodeType& node, double minZ, double maxZ);
   ///Returns false, if the type_id (of the message) does not correspond to the template paramter
   ///of this class, true if correct or unknown (i.e., no specialized method for that template).
@@ -163,6 +213,6 @@ typedef octomap_rviz_plugin::TemplatedOccupancyGridDisplay<octomap::OcTree> OcTr
 typedef octomap_rviz_plugin::TemplatedOccupancyGridDisplay<octomap::ColorOcTree> ColorOcTreeGridDisplay;
 typedef octomap_rviz_plugin::TemplatedOccupancyGridDisplay<octomap::OcTreeStamped> OcTreeStampedGridDisplay;
 
-} // namespace octomap_rviz_plugin
+}  // namespace octomap_rviz_plugin
 
-#endif //RVIZ_OCCUPANCY_GRID_DISPLAY_H
+#endif  // RVIZ_OCCUPANCY_GRID_DISPLAY_H
