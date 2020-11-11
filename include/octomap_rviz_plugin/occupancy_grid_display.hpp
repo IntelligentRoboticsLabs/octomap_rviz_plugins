@@ -31,8 +31,8 @@
  *
  */
 
-#ifndef RVIZ_DEFAULT_PLUGINS__DISPLAYS__MAP__MAP_DISPLAY_HPP_
-#define RVIZ_DEFAULT_PLUGINS__DISPLAYS__MAP__MAP_DISPLAY_HPP_
+#ifndef RVIZ_OCCUPANCY_GRID_DISPLAY_H
+#define RVIZ_OCCUPANCY_GRID_DISPLAY_H
 
 #include <memory>
 #include <string>
@@ -215,4 +215,4 @@ typedef octomap_rviz_plugin::TemplatedOccupancyGridDisplay<octomap::OcTreeStampe
 
 }  // namespace octomap_rviz_plugin
 
-#endif  // RVIZ_DEFAULT_PLUGINS__DISPLAYS__MAP__MAP_DISPLAY_HPP_
+#endif  // RVIZ_OCCUPANCY_GRID_DISPLAY_H
